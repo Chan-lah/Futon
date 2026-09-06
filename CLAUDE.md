@@ -110,3 +110,41 @@ After each merged change, exercise: open library → browse a source → read a 
 download a chapter → resume reading.
 
 One item per commit.
+
+---
+
+## 🔴 Running the debug build as a daily driver
+
+The `.debug` variant is what's installed on the phone (it holds the real library: ~900 favourites).
+Two debug-only costs matter when it's used daily rather than for development:
+
+**LeakCanary writes heap dumps to `/sdcard/Download/leakcanary-<pkg>/`.**
+Observed: **552 MB across 8 `.hprof` files in 25 minutes** of normal use. On a device that is already
+at 100% storage this is actively harmful.
+
+It is controlled by an existing toggle — SharedPreferences file `_debug`, key `leak_canary`,
+**defaulting to `true`** (`app/src/debug/kotlin/.../FutonApp.kt`). In-app: Settings → Debug.
+Set to `false` on this device. If you ever wipe app data, **set it again** — the default is on.
+
+`debugImplementation libs.leakcanary.android` (app/build.gradle:240) is the dependency;
+`nightlyImplementation` on :241 means nightly builds carry it too. Release does not.
+
+**StrictMode is also enabled in debug** with `detectNetwork`, `detectDiskWrites`,
+`detectUnbufferedIo` and `penaltyLog` — real overhead on a slow device.
+
+**Longer term:** a `release` build avoids both, is minified (R8), and leaves `SENTRY_DSN` empty when
+the env var is unset. The blocker is that release drops the `.debug` applicationId suffix, so it
+installs as a *separate app* and would not see the existing library — moving to release requires a
+backup/restore migration first. Release also needs a keystore (`KEYSTORE_FILE`, `KEYSTORE_PASSWORD`,
+`KEY_ALIAS`, `KEY_PASSWORD` env vars, per app/build.gradle:50-57).
+
+## Device storage reality
+
+The phone is at **100% storage** (221 GB, ~1 GB free), with ~161 GB of manga in
+`/sdcard/Download/Telegram` across 169 series folders — which is also `local_storage` in app prefs.
+
+Consequences to keep in mind when diagnosing anything:
+- "Broken source" symptoms (blank pages, failed loads) are often just failed cache writes.
+- The tracker auto-download (`tracker_download=DOWNLOADED`) must stay **DISABLED** until there is
+  real free space, or it will try to pull new chapters onto a full disk.
+- Using Telegram's own download folder as the library root is fragile; Telegram may clean it.
