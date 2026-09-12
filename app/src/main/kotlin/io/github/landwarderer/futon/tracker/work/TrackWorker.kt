@@ -127,6 +127,12 @@ class TrackWorker @AssistedInject constructor(
 	@CheckResult
 	private suspend fun checkUpdatesAsync(tracks: List<MangaTracking>): List<NotificationInfo> {
 		val semaphore = Semaphore(MAX_PARALLELISM)
+		// Cloudflare protection is per-domain, not per-manga, so one resolution attempt covers
+		// every track from that source. Without this the worker calls the resolver once per
+		// failing manga -- and because CaptchaHandler serialises attempts behind a mutex with a
+		// 20s timeout each, a source with dozens of blocked tracks (AquaManga: 63, ManhuaUs: 37)
+		// stalls the whole batch for many minutes and the run never finishes.
+		val cfAttempted = HashSet<String>()
 		return channelFlow {
 			for (track in tracks) {
 				launch {
@@ -151,7 +157,7 @@ class TrackWorker @AssistedInject constructor(
 			when (it) {
 				is MangaUpdates.Failure -> {
 					val e = it.error
-					if (e is CloudFlareException) {
+					if (e is CloudFlareException && cfAttempted.add(e.source.name)) {
 						captchaHandler.handle(e)
 					}
 				}
