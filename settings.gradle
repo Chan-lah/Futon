@@ -20,6 +20,14 @@ pluginManagement {
 dependencyResolutionManagement {
 	repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
 	repositories {
+		// LOCAL-ONLY: consume the sibling ../parsers clone via `gradlew publishToMavenLocal`
+		// instead of JitPack, so locally-written parser fixes reach the APK without a push.
+		// Scoped to org.koitharu so nothing else resolves out of ~/.m2 by accident.
+		mavenLocal {
+			content {
+				includeGroup 'org.koitharu'
+			}
+		}
 		google()
 		mavenCentral()
 		maven {

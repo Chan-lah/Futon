@@ -14,6 +14,7 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
+import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.allowRgb565
 import coil3.svg.SvgDecoder
@@ -79,6 +80,12 @@ interface AppModule {
 
 	companion object {
 
+		/** Share of the app heap Coil may use for decoded bitmaps. See ImageLoader config below. */
+		private const val MEMORY_CACHE_PERCENT = 0.30
+
+		/** Upper bound for the on-disk thumbnail cache, which lives on shared storage. */
+		private val THUMB_DISK_CACHE_SIZE = FileSize.MEGABYTES.convert(256, FileSize.BYTES)
+
 		@Provides
 		@LocalizedAppContext
 		fun provideLocalizedContext(
@@ -114,6 +121,10 @@ interface AppModule {
 				val rootDir = context.externalCacheDir ?: context.cacheDir
 				DiskCache.Builder()
 					.directory(rootDir.resolve(CacheDir.THUMBS.dir))
+					// Explicit cap: this cache lives on shared storage, which has run to 100% full
+					// on this device. Bounding it keeps thumbnails from competing with the manga
+					// library for space.
+					.maxSizeBytes(THUMB_DISK_CACHE_SIZE)
 					.build()
 			}
 			val okHttpClientLazy = lazy {
@@ -122,6 +133,15 @@ interface AppModule {
 			return ImageLoader.Builder(context)
 				.interceptorCoroutineContext(Dispatchers.IO)
 				.diskCache(diskCacheFactory)
+				// Sized explicitly rather than left on defaults. The per-app heap on this device
+				// is capped at 256 MB, and full-page webtoon images are large, so a bigger share
+				// meaningfully cuts re-decodes when scrolling back through a chapter. Kept at 30%
+				// (not higher) to leave headroom for decoding a page while the cache is full.
+				.memoryCache {
+					MemoryCache.Builder()
+						.maxSizePercent(context, MEMORY_CACHE_PERCENT)
+						.build()
+				}
 				.logger(if (BuildConfig.DEBUG) DebugLogger() else null)
 				.allowRgb565(context.isLowRamDevice())
 				.eventListener(captchaHandler)

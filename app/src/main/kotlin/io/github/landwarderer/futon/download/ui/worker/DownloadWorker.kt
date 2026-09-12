@@ -632,7 +632,14 @@ class DownloadWorker @AssistedInject constructor(
 	companion object {
 
 		const val MAX_FAILSAFE_ATTEMPTS = 2
-		const val MAX_PAGES_PARALLELISM = 4
+
+		/**
+		 * Page images fetched concurrently within a chapter. Raised from 4: downloads here are
+		 * latency-bound rather than bandwidth-bound (many small images, each needing a round
+		 * trip), so more in flight fills the pipe better. Kept modest so sources that rate-limit
+		 * aren't tripped.
+		 */
+		const val MAX_PAGES_PARALLELISM = 6
 		const val DOWNLOAD_ERROR_DELAY = 2_000L
 		const val MAX_RETRY_DELAY = 7_200_000L // 2 hours
 		const val TAG = "download"

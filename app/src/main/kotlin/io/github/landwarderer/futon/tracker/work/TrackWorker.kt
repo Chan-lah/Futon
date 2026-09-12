@@ -29,7 +29,6 @@ import dagger.Lazy
 import dagger.Reusable
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import io.github.landwarderer.futon.BuildConfig
 import io.github.landwarderer.futon.R
 import io.github.landwarderer.futon.core.db.MangaDatabase
 import io.github.landwarderer.futon.core.exceptions.CloudFlareException
@@ -340,7 +339,22 @@ class TrackWorker @AssistedInject constructor(
 		const val TAG = "tracking"
 		const val TAG_ONESHOT = "tracking_oneshot"
 		const val MAX_PARALLELISM = 6
-		val BATCH_SIZE = if (BuildConfig.DEBUG) 20 else 46
+
+		/**
+		 * Tracks checked per worker run.
+		 *
+		 * The scheduler derives its interval as
+		 * `(18 / ceil(trackCount / BATCH_SIZE) / frequency).coerceAtLeast(2)` hours, so a full
+		 * sweep takes `runs * interval` hours. With ~950 tracked manga the upstream values were
+		 * far too small: 20 (debug) meant 48 runs x 2h = ~96h per sweep, and because the first
+		 * check of a manga only records a baseline, the feed needs *two* sweeps -- about 8 days
+		 * before anything appears.
+		 *
+		 * 120 minimises total sweep time for a library this size (8 runs x 2h = ~16h); larger
+		 * values push the interval back up and make it worse again. Debug and release are kept
+		 * identical because this build is used as a daily driver, not just for development.
+		 */
+		const val BATCH_SIZE = 120
 		const val SETTINGS_ACTION_CODE = 5
 	}
 }

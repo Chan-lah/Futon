@@ -147,8 +147,14 @@ dependencies {
 		// -DparsersVersionOverride=$(curl -s https://api.github.com/repos/kotatsu-redo/kotatsu-parsers-redo/commits/master -H "Accept: application/vnd.github.sha" | cut -c -10)
 		parsersVersion = System.getProperty('parsersVersionOverride')
 	}
+	// LOCAL-ONLY: resolves the sibling ../parsers clone published via
+	// `gradlew publishToMavenLocal` (org.koitharu:kotatsu-parsers:1.0), so parser fixes
+	// written locally reach the APK without pushing to a fork + waiting on JitPack.
+	// To go back to upstream parsers, restore the JitPack line below and drop mavenLocal
+	// from settings.gradle:
+	//   implementation("com.github.clquwu:kotatsu-parsers-redo:$parsersVersion") { ... }
 	//noinspection UseTomlInstead
-	implementation("com.github.clquwu:kotatsu-parsers-redo:$parsersVersion") {
+	implementation("org.koitharu:kotatsu-parsers:1.0") {
 		exclude group: 'org.json', module: 'json'
 	}
 
