@@ -96,7 +96,12 @@ class TrackWorker @AssistedInject constructor(
 			throw e
 		} catch (e: Throwable) {
 			e.printStackTraceDebug("TrackWorker::doWork")
-			Result.failure()
+			// retry(), not failure(): for a PeriodicWorkRequest, failure() is terminal -- WorkManager
+			// stops scheduling further periods. A single transient error (a source timing out, a
+			// network blip) would therefore kill the tracker permanently, with no user-visible sign
+			// beyond the feed silently never updating again. This is not hypothetical: the worker
+			// died this way and sat in FAILED for ~12h while every track stayed unchecked.
+			Result.retry()
 		} finally {
 			withContext(NonCancellable) {
 				notificationManager.cancel(WORKER_NOTIFICATION_ID)
@@ -296,8 +301,18 @@ class TrackWorker @AssistedInject constructor(
 				.addTag(TAG)
 				.setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.MINUTES)
 				.build()
+			// UPDATE cannot revive work that has reached a terminal state: it updates the existing
+			// WorkSpec in place and leaves it FAILED/CANCELLED, so the tracker stays dead and every
+			// subsequent schedule() call is a silent no-op. isScheduled() is false in exactly that
+			// case (and when nothing is scheduled at all), so re-enqueue from scratch there and only
+			// use UPDATE to retune a schedule that is genuinely still pending.
+			val policy = if (isScheduled()) {
+				ExistingPeriodicWorkPolicy.UPDATE
+			} else {
+				ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE
+			}
 			workManager
-				.enqueueUniquePeriodicWork(TAG, ExistingPeriodicWorkPolicy.UPDATE, request)
+				.enqueueUniquePeriodicWork(TAG, policy, request)
 				.await()
 		}
 
